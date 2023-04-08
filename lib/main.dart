@@ -1,8 +1,23 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:bloc_course/bloc/bloc_actions.dart';
+import 'package:bloc_course/bloc/person.dart';
+import 'package:bloc_course/bloc/person_bloc.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+
+extension Subscript<T> on Iterable<T> {
+  T? operator [](int index) => length > index ? elementAt(index) : null;
+}
+
+
+Future<Iterable<Person>> getPersons(String url) => HttpClient()
+    .getUrl(Uri.parse(url))
+    .then((req) => req.close())
+    .then((res) => res.transform(utf8.decoder).join())
+    .then((str) => json.decode(str) as List<dynamic>)
+    .then((list) => list.map((e) => Person.fromMap(e)));
 
 void main() {
   runApp(const MyApp());
@@ -24,96 +39,6 @@ class MyApp extends StatelessWidget {
       ),
     );
   }
-}
-
-enum PersonUrl {
-  person1,
-  person2,
-}
-
-extension PersonUrlExtension on PersonUrl {
-  String get urlString {
-    switch (this) {
-      case PersonUrl.person1:
-        return "http://127.0.0.1:5500/api/person1.json";
-      case PersonUrl.person2:
-        return "http://127.0.0.1:5500/api/person2.json";
-    }
-  }
-}
-
-@immutable
-class Person {
-  final String name;
-  final int age;
-
-  const Person({
-    required this.name,
-    required this.age,
-  });
-
-  Person.fromMap(Map<String, dynamic> map)
-      : name = map['name'] ?? '',
-        age = map['age'] ?? 0;
-}
-
-Future<Iterable<Person>> getPersons(String url) => HttpClient()
-    .getUrl(Uri.parse(url))
-    .then((req) => req.close())
-    .then((res) => res.transform(utf8.decoder).join())
-    .then((str) => json.decode(str) as List<dynamic>)
-    .then((list) => list.map((e) => Person.fromMap(e)));
-
-@immutable
-abstract class LoadAction {
-  const LoadAction();
-}
-
-@immutable
-class LoadPersonAction implements LoadAction {
-  final PersonUrl personUrl;
-  const LoadPersonAction({required this.personUrl});
-}
-
-@immutable
-class FetchResult {
-  final Iterable<Person> persons;
-  final bool isCashed;
-
-  const FetchResult({
-    required this.persons,
-    required this.isCashed,
-  });
-}
-
-class PersonBloc extends Bloc<LoadAction, FetchResult?> {
-  final Map<PersonUrl, Iterable<Person>> cashe = {};
-
-  PersonBloc() : super(null) {
-    on<LoadPersonAction>((event, emit) async {
-      final url = event.personUrl;
-      if (cashe.containsKey(url)) {
-        final persons = cashe[url]!;
-        final fetchResult = FetchResult(
-          persons: persons,
-          isCashed: true,
-        );
-        emit(fetchResult);
-      } else {
-        final persons = await getPersons(url.urlString);
-        cashe[url] = persons;
-        final fetchResult = FetchResult(
-          persons: persons,
-          isCashed: false,
-        );
-        emit(fetchResult);
-      }
-    });
-  }
-}
-
-extension Subscript<T> on Iterable<T> {
-  T? operator [](int index) => length > index ? elementAt(index) : null;
 }
 
 class MyHomePage extends StatefulWidget {
@@ -138,7 +63,8 @@ class _MyHomePageState extends State<MyHomePage> {
                 ElevatedButton(
                   onPressed: () => context.read<PersonBloc>().add(
                         const LoadPersonAction(
-                          personUrl: PersonUrl.person1,
+                          url: person1Url,
+                          loader: getPersons,
                         ),
                       ),
                   child: const Text("Load Persons 1#"),
@@ -146,7 +72,8 @@ class _MyHomePageState extends State<MyHomePage> {
                 ElevatedButton(
                   onPressed: () => context.read<PersonBloc>().add(
                         const LoadPersonAction(
-                          personUrl: PersonUrl.person2,
+                          url: person2Url,
+                          loader: getPersons,
                         ),
                       ),
                   child: const Text("Load Persons 2#"),
